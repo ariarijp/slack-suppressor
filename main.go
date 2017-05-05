@@ -1,7 +1,8 @@
 package main
 
 import (
-	"log"
+	"encoding/json"
+	"fmt"
 	"os"
 
 	"github.com/BurntSushi/toml"
@@ -12,7 +13,36 @@ type Config struct {
 	Keywords []string
 }
 
-func contains(name string, keywords *[]string) bool {
+type SuppressedEvent struct {
+	Event   *slack.MessageEvent `json:"event"`
+	Channel interface{}         `json:"channel"`
+}
+
+func getChannel(api *slack.Client, ev *slack.MessageEvent) (interface{}, error) {
+	var ch interface{}
+
+	ch, err := api.GetChannelInfo(ev.Channel)
+	if err != nil {
+		ch, err = api.GetGroupInfo(ev.Channel)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return ch, nil
+}
+
+func contains(ch interface{}, keywords *[]string) bool {
+	name := ""
+
+	switch ch.(type) {
+	case *slack.Channel:
+		name = ch.(*slack.Channel).Name
+	case *slack.Group:
+		name = ch.(*slack.Group).Name
+	}
+
 	for _, keyword := range *keywords {
 		if name == keyword {
 			return true
@@ -20,6 +50,27 @@ func contains(name string, keywords *[]string) bool {
 	}
 
 	return false
+}
+
+func markAsRead(api *slack.Client, ch interface{}, ev *slack.MessageEvent) error {
+	var err error
+
+	switch ch.(type) {
+	case *slack.Channel:
+		err = api.SetChannelReadMark(ch.(*slack.Channel).ID, ev.Timestamp)
+	case *slack.Group:
+		err = api.SetGroupReadMark(ch.(*slack.Group).ID, ev.Timestamp)
+	}
+
+	b, _ := json.Marshal(SuppressedEvent{
+		Event:   ev,
+		Channel: ch,
+	})
+	if b != nil {
+		fmt.Println(string(b))
+	}
+
+	return err
 }
 
 func main() {
@@ -37,35 +88,25 @@ func main() {
 	for msg := range rtm.IncomingEvents {
 		switch ev := msg.Data.(type) {
 		case *slack.MessageEvent:
-			var name *string
-
-			ch, _ := api.GetChannelInfo(ev.Channel)
-			if ch != nil {
-				name = &ch.Name
-			}
-
-			grp, _ := api.GetGroupInfo(ev.Channel)
-			if grp != nil {
-				name = &grp.Name
-			}
-
-			if name == nil {
-				continue
-			} else if !contains(*name, &conf.Keywords) {
-				continue
-			}
-
-			err = api.SetChannelReadMark(ch.ID, ev.Timestamp)
+			ch, err := getChannel(api, ev)
 			if err != nil {
-				log.Println(err)
+				fmt.Fprintln(os.Stderr, err)
 				continue
 			}
 
-			log.Println(ev)
+			if !contains(ch, &conf.Keywords) {
+				continue
+			}
+
+			err = markAsRead(api, ch, ev)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				continue
+			}
 		case *slack.RTMError:
-			log.Printf("Error: %s\n", ev.Error())
+			fmt.Fprintf(os.Stderr, "Error: %s\n", ev.Error())
 		case *slack.InvalidAuthEvent:
-			log.Println("Invalid credentials")
+			fmt.Fprintln(os.Stderr, "Invalid credentials")
 			return
 		}
 	}
