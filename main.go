@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 
@@ -74,10 +75,14 @@ func markAsRead(api *slack.Client, ch interface{}, ev *slack.MessageEvent) error
 }
 
 func main() {
+	var confPath string
+	flag.StringVar(&confPath, "config", "~/.slack-suppressor.toml", "Config file")
+	flag.Parse()
+
 	api := slack.New(os.Getenv("SLACK_TOKEN"))
 
 	var conf Config
-	_, err := toml.DecodeFile("config.toml", &conf)
+	_, err := toml.DecodeFile(confPath, &conf)
 	if err != nil {
 		panic(err)
 	}
