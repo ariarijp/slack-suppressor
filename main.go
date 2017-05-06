@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -18,6 +20,7 @@ type Config struct {
 type SuppressedEvent struct {
 	Event    *slack.MessageEvent `json:"event"`
 	Channel  interface{}         `json:"channel"`
+	User     *slack.User `json:"user"`
 	DateTime time.Time           `json:"datetime"`
 }
 
@@ -26,6 +29,54 @@ func (se *SuppressedEvent) printAsJSON() {
 	if b != nil {
 		fmt.Println(string(b))
 	}
+}
+
+func (se *SuppressedEvent) printAsMarkdown() {
+	sec, _ := strconv.ParseFloat(se.Event.Timestamp, 64)
+	ts := time.Unix(int64(math.Floor(sec)), 0)
+	fmt.Println("## Timestamp")
+	fmt.Println()
+	fmt.Println(ts)
+	fmt.Println()
+
+	switch se.Channel.(type) {
+	case *slack.Channel:
+		fmt.Println("## Channel")
+		fmt.Println()
+		fmt.Println(se.Channel.(*slack.Channel).Name)
+	case *slack.Group:
+		fmt.Println("## Group")
+		fmt.Println()
+		fmt.Println(se.Channel.(*slack.Group).Name)
+	}
+	fmt.Println()
+
+	fmt.Println("## Username")
+	fmt.Println()
+	if se.User != nil {
+		fmt.Println(se.User.Name)
+	} else {
+		fmt.Println("bot")
+	}
+	fmt.Println()
+
+	fmt.Println("## Text")
+	fmt.Println()
+	fmt.Println(se.Event.Text)
+	fmt.Println()
+
+	fmt.Println("## Attachments")
+	fmt.Println()
+	if len(se.Event.Msg.Attachments) > 0 {
+		attachments := se.Event.Msg.Attachments
+		for _, attachment := range attachments {
+			fmt.Println(attachment.Fallback)
+			fmt.Println()
+		}
+	}
+
+	fmt.Println("---")
+	fmt.Println()
 }
 
 func getChannel(api *slack.Client, ev *slack.MessageEvent) (interface{}, error) {
@@ -72,9 +123,12 @@ func markAsRead(api *slack.Client, ch interface{}, ev *slack.MessageEvent) (*Sup
 		err = api.SetGroupReadMark(ch.(*slack.Group).ID, ev.Timestamp)
 	}
 
+	u, _ := api.GetUserInfo(ev.User)
+
 	se := SuppressedEvent{
 		Event:    ev,
 		Channel:  ch,
+		User:     u,
 		DateTime: time.Now(),
 	}
 
@@ -83,7 +137,9 @@ func markAsRead(api *slack.Client, ch interface{}, ev *slack.MessageEvent) (*Sup
 
 func main() {
 	var confPath string
+	var confPrinter string
 	flag.StringVar(&confPath, "config", "~/.slack-suppressor.toml", "Config file")
+	flag.StringVar(&confPrinter, "printer", "json", "Printer < json | markdown >")
 	flag.Parse()
 
 	api := slack.New(os.Getenv("SLACK_TOKEN"))
@@ -116,7 +172,11 @@ func main() {
 				continue
 			}
 
-			se.printAsJSON()
+			if confPrinter == "markdown" {
+				se.printAsMarkdown()
+			} else {
+				se.printAsJSON()
+			}
 		case *slack.RTMError:
 			fmt.Fprintf(os.Stderr, "Error: %s\n", ev.Error())
 		case *slack.InvalidAuthEvent:
