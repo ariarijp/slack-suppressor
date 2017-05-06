@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/nlopes/slack"
@@ -15,8 +16,9 @@ type Config struct {
 }
 
 type SuppressedEvent struct {
-	Event   *slack.MessageEvent `json:"event"`
-	Channel interface{}         `json:"channel"`
+	Event    *slack.MessageEvent `json:"event"`
+	Channel  interface{}         `json:"channel"`
+	DateTime time.Time           `json:"datetime"`
 }
 
 func getChannel(api *slack.Client, ev *slack.MessageEvent) (interface{}, error) {
@@ -64,8 +66,9 @@ func markAsRead(api *slack.Client, ch interface{}, ev *slack.MessageEvent) error
 	}
 
 	b, _ := json.Marshal(SuppressedEvent{
-		Event:   ev,
-		Channel: ch,
+		Event:    ev,
+		Channel:  ch,
+		DateTime: time.Now(),
 	})
 	if b != nil {
 		fmt.Println(string(b))
