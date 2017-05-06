@@ -21,6 +21,13 @@ type SuppressedEvent struct {
 	DateTime time.Time           `json:"datetime"`
 }
 
+func (se *SuppressedEvent) printAsJSON() {
+	b, _ := json.Marshal(se)
+	if b != nil {
+		fmt.Println(string(b))
+	}
+}
+
 func getChannel(api *slack.Client, ev *slack.MessageEvent) (interface{}, error) {
 	var ch interface{}
 
@@ -55,7 +62,7 @@ func contains(ch interface{}, keywords *[]string) bool {
 	return false
 }
 
-func markAsRead(api *slack.Client, ch interface{}, ev *slack.MessageEvent) error {
+func markAsRead(api *slack.Client, ch interface{}, ev *slack.MessageEvent) (*SuppressedEvent, error) {
 	var err error
 
 	switch ch.(type) {
@@ -65,16 +72,13 @@ func markAsRead(api *slack.Client, ch interface{}, ev *slack.MessageEvent) error
 		err = api.SetGroupReadMark(ch.(*slack.Group).ID, ev.Timestamp)
 	}
 
-	b, _ := json.Marshal(SuppressedEvent{
+	se := SuppressedEvent{
 		Event:    ev,
 		Channel:  ch,
 		DateTime: time.Now(),
-	})
-	if b != nil {
-		fmt.Println(string(b))
 	}
 
-	return err
+	return &se, err
 }
 
 func main() {
@@ -106,11 +110,13 @@ func main() {
 				continue
 			}
 
-			err = markAsRead(api, ch, ev)
+			se, err := markAsRead(api, ch, ev)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				continue
 			}
+
+			se.printAsJSON()
 		case *slack.RTMError:
 			fmt.Fprintf(os.Stderr, "Error: %s\n", ev.Error())
 		case *slack.InvalidAuthEvent:
