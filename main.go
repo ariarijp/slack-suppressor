@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/fatih/color"
 	"github.com/nlopes/slack"
 )
 
@@ -20,7 +21,7 @@ type Config struct {
 type SuppressedEvent struct {
 	Event    *slack.MessageEvent `json:"event"`
 	Channel  interface{}         `json:"channel"`
-	User     *slack.User `json:"user"`
+	User     *slack.User         `json:"user"`
 	DateTime time.Time           `json:"datetime"`
 }
 
@@ -32,26 +33,28 @@ func (se *SuppressedEvent) printAsJSON() {
 }
 
 func (se *SuppressedEvent) printAsMarkdown() {
+	heading := color.New(color.Bold, color.FgWhite)
+
 	sec, _ := strconv.ParseFloat(se.Event.Timestamp, 64)
 	ts := time.Unix(int64(math.Floor(sec)), 0)
-	fmt.Println("## Timestamp")
+	heading.Println("## Timestamp")
 	fmt.Println()
 	fmt.Println(ts)
 	fmt.Println()
 
 	switch se.Channel.(type) {
 	case *slack.Channel:
-		fmt.Println("## Channel")
+		heading.Println("## Channel")
 		fmt.Println()
 		fmt.Println(se.Channel.(*slack.Channel).Name)
 	case *slack.Group:
-		fmt.Println("## Group")
+		heading.Println("## Group")
 		fmt.Println()
 		fmt.Println(se.Channel.(*slack.Group).Name)
 	}
 	fmt.Println()
 
-	fmt.Println("## Username")
+	heading.Println("## Username")
 	fmt.Println()
 	if se.User != nil {
 		fmt.Println(se.User.Name)
@@ -60,12 +63,12 @@ func (se *SuppressedEvent) printAsMarkdown() {
 	}
 	fmt.Println()
 
-	fmt.Println("## Text")
+	heading.Println("## Text")
 	fmt.Println()
 	fmt.Println(se.Event.Text)
 	fmt.Println()
 
-	fmt.Println("## Attachments")
+	heading.Println("## Attachments")
 	fmt.Println()
 	if len(se.Event.Msg.Attachments) > 0 {
 		attachments := se.Event.Msg.Attachments
