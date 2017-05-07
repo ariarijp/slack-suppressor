@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -33,42 +34,42 @@ func (se *SuppressedEvent) printAsJSON() {
 }
 
 func (se *SuppressedEvent) printAsMarkdown() {
-	heading := color.New(color.Bold, color.FgWhite)
+	whiteBold := color.New(color.Bold, color.FgWhite)
 
 	sec, _ := strconv.ParseFloat(se.Event.Timestamp, 64)
 	ts := time.Unix(int64(math.Floor(sec)), 0)
-	heading.Println("## Timestamp")
+	whiteBold.Println("## Timestamp")
 	fmt.Println()
 	fmt.Println(ts)
 	fmt.Println()
 
 	switch se.Channel.(type) {
 	case *slack.Channel:
-		heading.Println("## Channel")
+		whiteBold.Println("## Channel")
 		fmt.Println()
 		fmt.Println(se.Channel.(*slack.Channel).Name)
 	case *slack.Group:
-		heading.Println("## Group")
+		whiteBold.Println("## Group")
 		fmt.Println()
 		fmt.Println(se.Channel.(*slack.Group).Name)
 	}
 	fmt.Println()
 
-	heading.Println("## Username")
+	whiteBold.Println("## Username")
 	fmt.Println()
 	if se.User != nil {
 		fmt.Println(se.User.Name)
 	} else {
-		fmt.Println("bot")
+		fmt.Println("Unknown")
 	}
 	fmt.Println()
 
-	heading.Println("## Text")
+	whiteBold.Println("## Text")
 	fmt.Println()
 	fmt.Println(se.Event.Text)
 	fmt.Println()
 
-	heading.Println("## Attachments")
+	whiteBold.Println("## Attachments")
 	fmt.Println()
 	if len(se.Event.Msg.Attachments) > 0 {
 		attachments := se.Event.Msg.Attachments
@@ -80,6 +81,44 @@ func (se *SuppressedEvent) printAsMarkdown() {
 
 	fmt.Println("---")
 	fmt.Println()
+}
+
+func (se *SuppressedEvent) printAsCompact() {
+	whiteBold := color.New(color.Bold, color.FgWhite)
+
+	sec, _ := strconv.ParseFloat(se.Event.Timestamp, 64)
+	ts := time.Unix(int64(math.Floor(sec)), 0)
+	whiteBold.Print("Timestamp: ")
+	fmt.Println(ts)
+
+	switch se.Channel.(type) {
+	case *slack.Channel:
+		whiteBold.Print("Channel: ")
+		fmt.Println(se.Channel.(*slack.Channel).Name)
+	case *slack.Group:
+		whiteBold.Print("Group: ")
+		fmt.Println(se.Channel.(*slack.Group).Name)
+	}
+
+	username := "Unknown"
+	if se.User != nil {
+		username = se.User.Name
+	}
+	whiteBold.Print("Username: ")
+	fmt.Println(username)
+
+	whiteBold.Println("Text:")
+	fmt.Println(strings.TrimSpace(se.Event.Text))
+
+	if len(se.Event.Msg.Attachments) > 0 {
+		whiteBold.Println("Attachments:")
+		attachments := se.Event.Msg.Attachments
+		for _, attachment := range attachments {
+			fmt.Println(strings.TrimSpace(attachment.Fallback))
+		}
+	}
+
+	fmt.Println("---")
 }
 
 func getChannel(api *slack.Client, ev *slack.MessageEvent) (interface{}, error) {
@@ -142,7 +181,7 @@ func main() {
 	var confPath string
 	var confPrinter string
 	flag.StringVar(&confPath, "config", "~/.slack-suppressor.toml", "Config file")
-	flag.StringVar(&confPrinter, "printer", "json", "Printer < json | markdown >")
+	flag.StringVar(&confPrinter, "printer", "json", "Printer < json | markdown | compact >")
 	flag.Parse()
 
 	api := slack.New(os.Getenv("SLACK_TOKEN"))
@@ -175,9 +214,12 @@ func main() {
 				continue
 			}
 
-			if confPrinter == "markdown" {
+			switch confPrinter {
+			case "markdown":
 				se.printAsMarkdown()
-			} else {
+			case "compact":
+				se.printAsCompact()
+			default:
 				se.printAsJSON()
 			}
 		case *slack.RTMError:
